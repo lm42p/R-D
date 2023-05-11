@@ -10,7 +10,7 @@
 #define ROTARY_ENCODER_B_PIN 26 //DT
 #define ROTARY_ENCODER_BUTTON_PIN 32 //SW
 #define ROTARY_ENCODER_STEPS 4
-#define ROTARY_ENCODER_ACCELERATION 30000
+#define ROTARY_ENCODER_ACCELERATION 3000 //30000
 AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN, ROTARY_ENCODER_BUTTON_PIN, -1, ROTARY_ENCODER_STEPS);
 
 // stroke rotary encoder
@@ -42,9 +42,10 @@ int motorAcceleration = 1600000; //115000 vibro_accel = 8000000
 
 FastAccelStepperEngine engine = FastAccelStepperEngine();
 FastAccelStepper *stepper = NULL;
-long target=0;
+long target=0; // it's the target
 int previousDirection = 1;
-bool flag=true;
+bool stopped = false;
+unsigned long lastButtonPress = 0;  
 
 void setup() {
   Serial.begin(115200);
@@ -87,15 +88,12 @@ void setup() {
 void loop() {
 
   stepper->setSpeedInUs(rotaryEncoder.readEncoder());
-  Serial.printf("target = %ld\n\n", target);
-  Serial.printf("target-stepper->getCurrentPosition() = %ld\n\n", target-stepper->getCurrentPosition());
-  Serial.printf("previousDirection = %ld\n\n", previousDirection);
-  Serial.printf("getCurrentPosition() = %ld\n\n", stepper->getCurrentPosition());
-  delay(1000);
+
+  //Serial.println(stopped);
+  //delay(1000);
+  
   // just move the stepper back and forth in an endless loop
-  if (-target-stepper->getCurrentPosition() == 0)
-  {
-    //delay(5000);
+  if (not(stepper->isRunning()) && not(stopped)){
     previousDirection *= -1;
     if (previousDirection > 0)
     {
@@ -103,15 +101,12 @@ void loop() {
     }
     long relativeTargetPosition = -target * previousDirection; // mettre rotaryEncoder.readEncoder() à la place de DISTAN...
         stepper->moveTo(relativeTargetPosition,true);
-        Serial.printf("relativeTargetPosition = %ld\n\n", relativeTargetPosition);
-        
   }
 
 
   if (rotaryEncoder.encoderChanged())
   {
     Serial.println(rotaryEncoder.readEncoder());
-    //flag=false; //machine run again if machine has stopped
   }
   //if (rotaryEncoder.isEncoderButtonClicked())
   //{
@@ -124,8 +119,13 @@ void loop() {
   {
     Serial.println(rotaryEncoder2.readEncoder());
   }
-  //if (rotaryEncoder2.isEncoderButtonClicked())
-  //{
-  //  Serial.println("button 2 pressed");
-  //}
+  if (rotaryEncoder2.isEncoderButtonClicked()){
+    if (millis() - lastButtonPress > 50){
+    stopped = not(stopped);
+    }
+    lastButtonPress = millis();  
+    //stepper->stopMove();
+    //Serial.println(stepper->isStopping());
+  }
+  delay(1);
 }
