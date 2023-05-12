@@ -86,27 +86,19 @@ void setup() {
 }
 
 void loop() {
-
-  stepper->setSpeedInUs(rotaryEncoder.readEncoder());
-
-  //Serial.println(stopped);
-  //delay(1000);
-  
   // just move the stepper back and forth in an endless loop
   if (not(stepper->isRunning()) && not(stopped)){
     previousDirection *= -1;
-    if (previousDirection > 0)
-    {
-      target = rotaryEncoder2.readEncoder();
-    }
-    long relativeTargetPosition = -target * previousDirection; // mettre rotaryEncoder.readEncoder() à la place de DISTAN...
-        stepper->moveTo(relativeTargetPosition,true);
+    target = rotaryEncoder2.readEncoder();
+    long relativeTargetPosition = -target * previousDirection;
+    stepper->moveTo(relativeTargetPosition,true);
   }
 
-
+// speed rotary encoder
   if (rotaryEncoder.encoderChanged())
   {
     Serial.println(rotaryEncoder.readEncoder());
+    stepper->setSpeedInUs(rotaryEncoder.readEncoder());
   }
   //if (rotaryEncoder.isEncoderButtonClicked())
   //{
@@ -115,6 +107,7 @@ void loop() {
   //  distanceToTravel=0;
   //}
 
+// stroke rotary encoder
   if (rotaryEncoder2.encoderChanged())
   {
     Serial.println(rotaryEncoder2.readEncoder());
@@ -123,9 +116,7 @@ void loop() {
     if (millis() - lastButtonPress > 50){
     stopped = not(stopped);
     }
-    lastButtonPress = millis();  
-    //stepper->stopMove();
-    //Serial.println(stepper->isStopping());
+    lastButtonPress = millis();
+    Serial.println(stopped);
   }
-  delay(1);
 }
