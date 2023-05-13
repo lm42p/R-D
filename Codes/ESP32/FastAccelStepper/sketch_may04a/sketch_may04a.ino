@@ -1,122 +1,120 @@
-#include "AiEsp32RotaryEncoder.h"
-#include "Arduino.h"
-#include "FastAccelStepper.h"
 
-// As in StepperDemo for Motor 1 on ESP32
-//#define enablePinStepper 26 // pas utilisé encore
+#include <AccelStepper.h>
 
-//speed rotary encoder
-#define ROTARY_ENCODER_A_PIN 27 //CLK
-#define ROTARY_ENCODER_B_PIN 26 //DT
-#define ROTARY_ENCODER_BUTTON_PIN 32 //SW
-#define ROTARY_ENCODER_STEPS 4
-#define ROTARY_ENCODER_ACCELERATION 3000 //30000
-AiEsp32RotaryEncoder rotaryEncoder = AiEsp32RotaryEncoder(ROTARY_ENCODER_A_PIN, ROTARY_ENCODER_B_PIN, ROTARY_ENCODER_BUTTON_PIN, -1, ROTARY_ENCODER_STEPS);
+//User-defined values
+long receivedSteps = 0; //Number of steps
+long receivedSpeed = 0; //Steps / second
+long receivedMaxSpeed = 0; //Steps / second
+long receivedAcceleration = 0; //Steps / second^2
+long CurrentPosition = 0;
+char receivedCommand; //a letter sent from the terminal
+long StartTime = 0;
+long PreviousTime = 0;
+//-------------------------------------------------------------------------------
+bool newData, runallowed = false; // booleans for new data from serial, and runallowed flag
+bool lastStepPosition = false; //follows the steps to see if the last step was preformed
+bool pingpong_CW = true;
+bool pingpong_CCW = true;
+bool pingpongAllowed = false;
+//-------------------------------------------------------------------------------
+AccelStepper stepper(1, 33, 25);// direction Digital 9 (CCW), pulses Digital 8 (CLK)
 
-// stroke rotary encoder
-#define ROTARY_ENCODER2_A_PIN 13 //CLK
-#define ROTARY_ENCODER2_B_PIN 35 //DT
-#define ROTARY_ENCODER2_BUTTON_PIN 14 //SW
-#define ROTARY_ENCODER2_STEPS 4
-#define ROTARY_ENCODER2_ACCELERATION 7000
-AiEsp32RotaryEncoder rotaryEncoder2 = AiEsp32RotaryEncoder(ROTARY_ENCODER2_A_PIN, ROTARY_ENCODER2_B_PIN, ROTARY_ENCODER2_BUTTON_PIN, -1, ROTARY_ENCODER2_STEPS);
-
-void IRAM_ATTR readEncoderISR()
+void setup()
 {
-  rotaryEncoder.readEncoder_ISR();
-  rotaryEncoder2.readEncoder_ISR();
+  Serial.begin(115200); //define a baud rate
+
+  //setting up some default values for maximum speed and maximum acceleration
+  Serial.println("Default speed: 400 steps/s, default acceleration: 800 steps/s^2.");
+  stepper.setMaxSpeed(400); //SPEED = Steps / second
+  stepper.setAcceleration(800); //ACCELERATION = Steps /(second)^2
+  stepper.disableOutputs(); //disable outputs
 }
 
-// IO pin assignments
-const int MOTOR_STEP_PIN = 33;
-const int MOTOR_DIRECTION_PIN = 25;
+void loop() 
+{
+  //Constantly looping through these 4 functions. 
+  //We only use non-blocking commands, so something else (should also be non-blocking) can be done during the movement of the motor
 
-// Speed and stroke settings
-const int MIN_SPEED = 2000; //set min speed in us/step
-const int MAX_SPEED = 50; //set max speed in us/step
-const int MIN_STROKE = 10; // 10 vibro_stroke = 10
-const int MAX_STROKE = 3050; //15000 3000 3100  3050
+  RunTheMotor(); //function to handle the motor   
+  PingPong();
+}
 
-// Motor acceleration
-int motorAcceleration = 1600000; //115000 vibro_accel = 8000000
 
-FastAccelStepperEngine engine = FastAccelStepperEngine();
-FastAccelStepper *stepper = NULL;
-long target=0; // it's the target
-int previousDirection = 1;
-bool stopped = false;
-unsigned long lastButtonPress = 0;  
-
-void setup() {
-  Serial.begin(115200);
-  pinMode(ROTARY_ENCODER_A_PIN, INPUT_PULLUP);
-  pinMode(ROTARY_ENCODER_B_PIN, INPUT_PULLUP);
-
-  pinMode(ROTARY_ENCODER2_A_PIN, INPUT_PULLUP);
-  pinMode(ROTARY_ENCODER2_B_PIN, INPUT_PULLUP);
-
-  //speed
-  rotaryEncoder.begin();
-  rotaryEncoder.setup(readEncoderISR);
-  rotaryEncoder.setBoundaries(MAX_SPEED,MIN_SPEED, false); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
-  rotaryEncoder.setAcceleration(ROTARY_ENCODER_ACCELERATION);
-  
-  //stroke
-  rotaryEncoder2.begin();
-  rotaryEncoder2.setup(readEncoderISR);
-  rotaryEncoder2.setBoundaries(MIN_STROKE, MAX_STROKE, false); //minValue, maxValue, circleValues true|false (when max go to min and vice versa)
-  rotaryEncoder2.setAcceleration(ROTARY_ENCODER2_ACCELERATION);
-  
-  engine.init();
-  stepper = engine.stepperConnectToPin(MOTOR_STEP_PIN);
-  if (stepper) {
-    stepper->setDirectionPin(MOTOR_DIRECTION_PIN);
-    //stepper->setEnablePin(enablePinStepper); //not used yet
-    stepper->setAutoEnable(true);
-
-    // If auto enable/disable need delays, just add (one or both):
-    // stepper->setDelayToEnable(50);
-    // stepper->setDelayToDisable(1000);
-
-    stepper->setSpeedInUs(50);  //1000// the parameter is us/step !!!
-    stepper->setAcceleration(1600000); //100 200 160000
-
-    stepper->setCurrentPosition(0); // put a reference at 0
+void RunTheMotor() //function for the motor
+{
+  if (stepper.distanceToGo() != 0)
+  {
+    stepper.enableOutputs(); //enable pins
+    stepper.run(); //step the motor (this will step the motor by 1 step at each loop) 
+    lastStepPosition = true;
+  }
+  else //program enters this part if the runallowed is FALSE, we do not do anything
+  {
+     stepper.disableOutputs(); //disable outputs
+     if(lastStepPosition == true)
+     {
+      lastStepPosition = false;
+     }
+    return;
   }
 }
 
-void loop() {
-  // just move the stepper back and forth in an endless loop
-  if (not(stepper->isRunning()) && not(stopped)){
-    previousDirection *= -1;
-    target = rotaryEncoder2.readEncoder();
-    long relativeTargetPosition = -target * previousDirection;
-    stepper->moveTo(relativeTargetPosition,true);
-  }
-
-// speed rotary encoder
-  if (rotaryEncoder.encoderChanged())
-  {
-    Serial.println(rotaryEncoder.readEncoder());
-    stepper->setSpeedInUs(rotaryEncoder.readEncoder());
-  }
-  //if (rotaryEncoder.isEncoderButtonClicked())
-  //{
-  //  Serial.println("button pressed");
-  //  flag=true; //machine stops
-  //  distanceToTravel=0;
-  //}
-
-// stroke rotary encoder
-  if (rotaryEncoder2.encoderChanged())
-  {
-    Serial.println(rotaryEncoder2.readEncoder());
-  }
-  if (rotaryEncoder2.isEncoderButtonClicked()){
-    if (millis() - lastButtonPress > 50){
-    stopped = not(stopped);
+void PingPong()
+{       
+    if(pingpongAllowed == true) //If the pingpong function is allowed we enter
+    {
+      if(pingpong_CW == false) //CW rotation is not yet done
+      {  
+        stepper.moveTo(5000); //set a target position, it should be an absolute. relative (move()) leads to "infinite loop"
+        
+        if(stepper.distanceToGo() == 0) //When the above number of steps are completed, we manipulate the variables
+        {
+            pingpong_CW = true; //CW rotation is now done
+            pingpong_CCW = false; //CCW rotation is not yet done - this allows the code to enter the next ifs
+        }      
+      }
+        
+      if(pingpong_CW == true && pingpong_CCW == false) //CW is completed and CCW is not yet done
+      {
+        stepper.moveTo(0); //Absolute position 
+        
+        if(stepper.distanceToGo() == 0) //When the number of steps are completed
+          {
+            pingpong_CCW = true; //CCW is now done
+            pingpong_CW = false; //CW is not yet done. This allows the code to enter the first if again!
+          }     
+      }
     }
-    lastButtonPress = millis();
-    Serial.println(stopped);
-  }
 }
+
+void RotateRelative()
+{
+  //We move X steps from the current position of the stepper motor in a given direction (+/-).  
+  runallowed = true; //allow running - this allows entering the RunTheMotor() function.
+  stepper.setMaxSpeed(receivedSpeed); //set speed 
+  stepper.move(receivedSteps); //set relative distance and direction
+}
+
+void RotateAbsolute()
+{
+  //We move to an absolute position. 
+  //The AccelStepper library keeps track of the position.
+ 
+  runallowed = true; //allow running - this allows entering the RunTheMotor() function.
+  stepper.setMaxSpeed(receivedSpeed); //set speed
+  stepper.moveTo(receivedSteps); //set relative distance  
+}
+
+void PrintCommands()
+{ 
+  //Printing the commands
+  Serial.println(" 'C' : Prints all the commands and their functions.");
+  Serial.println(" 'P' : Rotates the motor - relative using move().");
+  Serial.println(" 'R' : Rotates the motor - absolute using moveTo().");
+  Serial.println(" 'S' : Stops the motor immediately.");
+  Serial.println(" 'A' : Sets an acceleration value.");
+  Serial.println(" 'V' : Sets a speed value using setSpeed().");
+  Serial.println(" 'v' : Sets a speed value using setMaxSpeed().");
+  Serial.println(" 'L' : Prints the current position/location of the motor using currentPosition().");
+  Serial.println(" 'U' : Updates the current position and makes it as the new 0 position using setCurrentPosition().");
+  Serial.println(" 'K' : Demonstrates an oscillating motion.");
