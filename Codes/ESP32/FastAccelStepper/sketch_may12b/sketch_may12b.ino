@@ -30,7 +30,7 @@ const int MOTOR_DIRECTION_PIN = 25;
 
 // Speed and stroke settings
 const int MIN_SPEED = 2000; //set min speed in us/step
-const int MAX_SPEED = 50; //set max speed in us/step
+const int MAX_SPEED = 50; //set max speed in us/step 50 20 5
 const int MIN_STROKE = 10; // 10 vibro_stroke = 10
 const int MAX_STROKE = 2950; //15000 3000 3100  3050, 2800,2000, 3050, 3000
 
@@ -75,25 +75,22 @@ void setup() {
     //stepper->setEnablePin(enablePinStepper); //not used yet
     stepper->setAutoEnable(true);
 
-    // If auto enable/disable need delays, just add (one or both):
-    // stepper->setDelayToEnable(50);
-    // stepper->setDelayToDisable(1000);
-
     stepper->setSpeedInUs(2000);  //1000// the parameter is us/step !!!
     stepper->setAcceleration(740000); //100 200 1600000, 16000, 160000, 160000, 320000
+      }
 
 // determination which side is used
   while (((millis() - lastButtonPress < 2000)) || not((green) || (red))){
 // determine which side is used
     if (rotaryEncoder2.isEncoderButtonClicked()) { // if speed button clicked then stop the machine
-      if (millis() - lastButtonPress > 500) {
+      if (millis() - lastButtonPress > 50) {
         green = true;
       }
       lastButtonPress = millis();
       Serial.println("green side is used");
     }
     if (rotaryEncoder.isEncoderButtonClicked()) { // if speed button clicked then stop the machine
-      if (millis() - lastButtonPress > 500) {
+      if (millis() - lastButtonPress > 50) {
         red = true;
       }
       lastButtonPress = millis();
@@ -107,7 +104,7 @@ void setup() {
   else if (red && not(green)){
     stepper->setCurrentPosition(-GAP); // put a reference at -50 to provide a physical gap
   }
-  else stepper->setCurrentPosition(-((MAX_STROKE/2)+GAP)); // put a reference at -50 to provide a physical gap}
+  else stepper->setCurrentPosition(((MAX_STROKE/2)+GAP)); // put a reference at -50 to provide a physical gap}
 
     // This provide the physical gap
     stepper->moveTo(0, true);
@@ -115,7 +112,7 @@ void setup() {
 // This is for safety. We have to put the speed and stroke at their minimum before we can
 // start the moves
   while (not(rotaryEncoder.readEncoder() == MIN_SPEED)  || not(rotaryEncoder2.readEncoder() == MAX_STROKE)) {}
-  }
+
 }
 
 void loop() {
